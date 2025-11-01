@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Video Gallery</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .folder-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .file-count {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .video-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .video-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 25px rgba(0,0,0,0.3);
+        }
+
+        .thumbnail {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: #ddd;
+        }
+
+        .video-info {
+            padding: 15px;
+        }
+
+        .video-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            word-break: break-word;
+        }
+
+        .video-size {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .fullscreen-player {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .fullscreen-player.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #fullscreenVideo {
+            width: 100%;
+            max-height: 70vh;
+            display: block;
+        }
+
+        .player-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .control-btn {
+            padding: 15px 25px;
+            background: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .control-btn:hover {
+            background: #f8f9fa;
+            transform: scale(1.05);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .nav-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .close-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .current-video-name {
+            color: white;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .empty-state p {
+            margin-bottom: 20px;
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .loading-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .loading-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .loading-bar {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .loading-text {
+            color: #6c757d;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto 0;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .video-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 15px;
+            }
+
+            .folder-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .player-controls {
+                flex-direction: column;
+            }
+
+            .control-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Local Video Gallery</h1>
+
+        <div class="controls-panel">
+            <div class="folder-controls">
+                <div class="file-input-wrapper">
+                    <label for="folderInput" class="btn btn-primary">📁 Select Videos</label>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple accept="video/*">
+                </div>
+                <div class="file-count" id="fileCount">No videos selected</div>
+            </div>
+        </div>
+
+        <div class="video-grid" id="videoGrid">
+            <div class="empty-state">
+                <p>👆 Click "Select Videos" to load your video files</p>
+                <p>You can select an entire folder or multiple video files</p>
+                <p>Supports: MP4, WebM, OGG, MOV, AVI, MKV</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-title">Loading Videos</div>
+            <div class="loading-bar-container">
+                <div class="loading-bar" id="loadingBar">0%</div>
+            </div>
+            <div class="loading-text" id="loadingText">Processing files...</div>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <div class="fullscreen-player" id="fullscreenPlayer">
+        <div class="player-container">
+            <div class="current-video-name" id="currentVideoName"></div>
+            <div class="video-wrapper">
+                <video id="fullscreenVideo" controls></video>
+            </div>
+            <div class="player-controls">
+                <button class="control-btn nav-btn" onclick="previousVideo()">⏮️ Previous</button>
+                <button class="control-btn" onclick="skipBackward()">⏪ -10s</button>
+                <button class="control-btn" onclick="togglePlayPause()">⏯️ Play/Pause</button>
+                <button class="control-btn" onclick="skipForward()">⏩ +10s</button>
+                <button class="control-btn nav-btn" onclick="nextVideo()">⏭️ Next</button>
+                <button class="control-btn close-btn" onclick="closePlayer()">✖️ Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let videoFiles = [];
+        let currentVideoIndex = 0;
+
+        document.getElementById('folderInput').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                showLoading();
+                // Small delay to ensure loading UI renders
+                setTimeout(() => loadVideos(files), 100);
+            }
+        });
+
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.add('active');
+            updateLoadingBar(0, 'Processing files...');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+
+        function updateLoadingBar(percentage, text) {
+            const bar = document.getElementById('loadingBar');
+            const loadingText = document.getElementById('loadingText');
+            bar.style.width = percentage + '%';
+            bar.textContent = Math.round(percentage) + '%';
+            if (text) loadingText.textContent = text;
+        }
+
+        function loadVideos(files) {
+            videoFiles = [];
+            
+            const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v', '.3gp'];
+            
+            updateLoadingBar(10, 'Filtering video files...');
+            
+            files.forEach(file => {
+                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                if (videoExtensions.includes(ext)) {
+                    videoFiles.push({
+                        name: file.name,
+                        file: file,
+                        size: formatFileSize(file.size),
+                        url: URL.createObjectURL(file)
+                    });
+                }
+            });
+
+            updateLoadingBar(30, 'Sorting videos...');
+
+            // Sort by name
+            videoFiles.sort((a, b) => a.name.localeCompare(b.name));
+
+            updateLoadingBar(50, `Found ${videoFiles.length} videos. Generating thumbnails...`);
+
+            document.getElementById('fileCount').textContent = 
+                videoFiles.length === 0 ? 'No video files found' : 
+                `${videoFiles.length} video${videoFiles.length !== 1 ? 's' : ''} loaded`;
+
+            displayVideos();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function displayVideos() {
+            const grid = document.getElementById('videoGrid');
+            
+            if (videoFiles.length === 0) {
+                grid.innerHTML = '<div class="empty-state"><p>No video files found in the selection</p><p>Please select a folder containing video files</p></div>';
+                hideLoading();
+                return;
+            }
+
+            grid.innerHTML = '';
+            updateLoadingBar(60, 'Creating video cards...');
+
+            let loadedCount = 0;
+            const totalVideos = videoFiles.length;
+
+            videoFiles.forEach((video, index) => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.onclick = () => openVideo(index);
+
+                const thumbnail = document.createElement('video');
+                thumbnail.className = 'thumbnail';
+                thumbnail.preload = 'metadata';
+                thumbnail.src = video.url;
+                
+                // Track thumbnail loading
+                thumbnail.addEventListener('loadedmetadata', () => {
+                    thumbnail.currentTime = 1;
+                });
+
+                thumbnail.addEventListener('loadeddata', () => {
+                    loadedCount++;
+                    const progress = 60 + (loadedCount / totalVideos) * 40;
+                    updateLoadingBar(progress, `Loading thumbnails... (${loadedCount}/${totalVideos})`);
+                    
+                    if (loadedCount === totalVideos) {
+                        setTimeout(() => {
+                            updateLoadingBar(100, 'Complete!');
+                            setTimeout(hideLoading, 500);
+                        }, 300);
+                    }
+                });
+
+                thumbnail.addEventListener('error', () => {
+                    loadedCount++;
+                    const progress = 60 + (loadedCount / totalVideos) * 40;
+                    updateLoadingBar(progress, `Loading thumbnails... (${loadedCount}/${totalVideos})`);
+                    
+                    if (loadedCount === totalVideos) {
+                        setTimeout(() => {
+                            updateLoadingBar(100, 'Complete!');
+                            setTimeout(hideLoading, 500);
+                        }, 300);
+                    }
+                });
+
+                const info = document.createElement('div');
+                info.className = 'video-info';
+                info.innerHTML = `
+                    <div class="video-name">${video.name}</div>
+                    <div class="video-size">${video.size}</div>
+                `;
+
+                card.appendChild(thumbnail);
+                card.appendChild(info);
+                grid.appendChild(card);
+            });
+
+            // Fallback: if no thumbnails load within 10 seconds, hide loading
+            setTimeout(() => {
+                if (document.getElementById('loadingOverlay').classList.contains('active')) {
+                    hideLoading();
+                }
+            }, 10000);
+        }
+
+        function openVideo(index) {
+            currentVideoIndex = index;
+            const video = videoFiles[index];
+            
+            const videoElement = document.getElementById('fullscreenVideo');
+            videoElement.src = video.url;
+            
+            document.getElementById('currentVideoName').textContent = video.name;
+            document.getElementById('fullscreenPlayer').classList.add('active');
+            
+            videoElement.play();
+        }
+
+        function closePlayer() {
+            const videoElement = document.getElementById('fullscreenVideo');
+            videoElement.pause();
+            document.getElementById('fullscreenPlayer').classList.remove('active');
+        }
+
+        function togglePlayPause() {
+            const videoElement = document.getElementById('fullscreenVideo');
+            if (videoElement.paused) {
+                videoElement.play();
+            } else {
+                videoElement.pause();
+            }
+        }
+
+        function skipForward() {
+            const videoElement = document.getElementById('fullscreenVideo');
+            videoElement.currentTime += 10;
+        }
+
+        function skipBackward() {
+            const videoElement = document.getElementById('fullscreenVideo');
+            videoElement.currentTime -= 10;
+        }
+
+        function nextVideo() {
+            if (currentVideoIndex < videoFiles.length - 1) {
+                openVideo(currentVideoIndex + 1);
+            } else {
+                openVideo(0); // Loop to first video
+            }
+        }
+
+        function previousVideo() {
+            if (currentVideoIndex > 0) {
+                openVideo(currentVideoIndex - 1);
+            } else {
+                openVideo(videoFiles.length - 1); // Loop to last video
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('fullscreenPlayer').classList.contains('active')) return;
+
+            switch(e.key) {
+                case ' ':
+                    e.preventDefault();
+                    togglePlayPause();
+                    break;
+                case 'ArrowRight':
+                    skipForward();
+                    break;
+                case 'ArrowLeft':
+                    skipBackward();
+                    break;
+                case 'Escape':
+                    closePlayer();
+                    break;
+                case 'n':
+                case 'N':
+                    nextVideo();
+                    break;
+                case 'p':
+                case 'P':
+                    previousVideo();
+                    break;
+            }
+        });
+
+        // Auto-play next video when current one ends
+        document.getElementById('fullscreenVideo').addEventListener('ended', () => {
+            nextVideo();
+        });
+    </script>
+</body>
+</html>
