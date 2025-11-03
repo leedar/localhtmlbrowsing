@@ -47,6 +47,66 @@
             align-items: center;
         }
 
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 26px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
         .file-input-wrapper {
             position: relative;
             overflow: hidden;
@@ -107,11 +167,23 @@
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            min-height: 280px;
         }
 
         .video-card:hover {
             transform: translateY(-8px);
             box-shadow: 0 12px 25px rgba(0,0,0,0.3);
+        }
+
+        .video-card.loading .thumbnail {
+            background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
 
         .thumbnail {
@@ -135,6 +207,14 @@
         .video-size {
             font-size: 12px;
             color: #6c757d;
+        }
+
+        .video-path {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 5px;
+            font-family: monospace;
+            word-break: break-all;
         }
 
         .fullscreen-player {
@@ -349,6 +429,13 @@
                     <label for="folderInput" class="btn btn-primary">📁 Select Videos</label>
                     <input type="file" id="folderInput" webkitdirectory directory multiple accept="video/*">
                 </div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Include Subdirectories</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="includeSubdirs" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
                 <div class="file-count" id="fileCount">No videos selected</div>
             </div>
         </div>
@@ -393,6 +480,8 @@
     <script>
         let videoFiles = [];
         let currentVideoIndex = 0;
+        let intersectionObserver = null;
+        const BATCH_SIZE = 12; // Load 12 thumbnails at a time
 
         document.getElementById('folderInput').addEventListener('change', function(e) {
             const files = Array.from(e.target.files);
@@ -420,19 +509,60 @@
             if (text) loadingText.textContent = text;
         }
 
+        // Setup Intersection Observer for lazy loading
+        function setupIntersectionObserver() {
+            if (intersectionObserver) {
+                intersectionObserver.disconnect();
+            }
+
+            intersectionObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const card = entry.target;
+                        const thumbnail = card.querySelector('.thumbnail');
+                        
+                        if (!thumbnail.src && thumbnail.dataset.videoUrl) {
+                            loadThumbnail(thumbnail, thumbnail.dataset.videoUrl);
+                            card.classList.remove('loading');
+                            intersectionObserver.unobserve(card);
+                        }
+                    }
+                });
+            }, {
+                root: null,
+                rootMargin: '200px', // Start loading 200px before entering viewport
+                threshold: 0.01
+            });
+        }
+
+        function loadThumbnail(thumbnail, url) {
+            thumbnail.src = url;
+            thumbnail.addEventListener('loadedmetadata', () => {
+                thumbnail.currentTime = 1;
+            });
+        }
+
         function loadVideos(files) {
             videoFiles = [];
             
             const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v', '.3gp'];
+            const includeSubdirs = document.getElementById('includeSubdirs').checked;
             
             updateLoadingBar(10, 'Filtering video files...');
             
             files.forEach(file => {
                 const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-                if (videoExtensions.includes(ext)) {
+                
+                // Check if file is in a subdirectory
+                const isInSubdir = file.webkitRelativePath ? 
+                    file.webkitRelativePath.split('/').length > 2 : false;
+                
+                // Include file if it's a video AND (includeSubdirs is true OR file is not in subdir)
+                if (videoExtensions.includes(ext) && (includeSubdirs || !isInSubdir)) {
                     videoFiles.push({
                         name: file.name,
                         file: file,
+                        path: file.webkitRelativePath || file.name,
                         size: formatFileSize(file.size),
                         url: URL.createObjectURL(file)
                     });
@@ -441,14 +571,18 @@
 
             updateLoadingBar(30, 'Sorting videos...');
 
-            // Sort by name
-            videoFiles.sort((a, b) => a.name.localeCompare(b.name));
+            // Sort by path then name
+            videoFiles.sort((a, b) => {
+                const pathCompare = a.path.localeCompare(b.path);
+                return pathCompare !== 0 ? pathCompare : a.name.localeCompare(b.name);
+            });
 
             updateLoadingBar(50, `Found ${videoFiles.length} videos. Generating thumbnails...`);
 
+            const subdirsText = includeSubdirs ? ' (including subdirectories)' : ' (root folder only)';
             document.getElementById('fileCount').textContent = 
                 videoFiles.length === 0 ? 'No video files found' : 
-                `${videoFiles.length} video${videoFiles.length !== 1 ? 's' : ''} loaded`;
+                `${videoFiles.length} video${videoFiles.length !== 1 ? 's' : ''} loaded${subdirsText}`;
 
             displayVideos();
         }
@@ -471,11 +605,12 @@
             }
 
             grid.innerHTML = '';
-            updateLoadingBar(60, 'Creating video cards...');
+            updateLoadingBar(60, 'Creating video gallery...');
 
-            let loadedCount = 0;
-            const totalVideos = videoFiles.length;
+            // Setup lazy loading observer
+            setupIntersectionObserver();
 
+            // Create all cards but only load first batch of thumbnails
             videoFiles.forEach((video, index) => {
                 const card = document.createElement('div');
                 card.className = 'video-card';
@@ -484,19 +619,58 @@
                 const thumbnail = document.createElement('video');
                 thumbnail.className = 'thumbnail';
                 thumbnail.preload = 'metadata';
-                thumbnail.src = video.url;
                 
-                // Track thumbnail loading
-                thumbnail.addEventListener('loadedmetadata', () => {
-                    thumbnail.currentTime = 1;
-                });
+                // For first batch, load immediately. For rest, set up lazy loading
+                if (index < BATCH_SIZE) {
+                    thumbnail.src = video.url;
+                    thumbnail.addEventListener('loadedmetadata', () => {
+                        thumbnail.currentTime = 1;
+                    });
+                } else {
+                    // Store URL in data attribute for lazy loading
+                    thumbnail.dataset.videoUrl = video.url;
+                    card.classList.add('loading');
+                }
 
+                const info = document.createElement('div');
+                info.className = 'video-info';
+                info.innerHTML = `
+                    <div class="video-name">${video.name}</div>
+                    <div class="video-size">${video.size}</div>
+                `;
+
+                // Show path if it's from a subdirectory
+                if (video.path && video.path !== video.name) {
+                    const pathDiv = document.createElement('div');
+                    pathDiv.className = 'video-path';
+                    pathDiv.textContent = video.path;
+                    info.appendChild(pathDiv);
+                }
+
+                card.appendChild(thumbnail);
+                card.appendChild(info);
+                grid.appendChild(card);
+
+                // Observe cards for lazy loading (except first batch)
+                if (index >= BATCH_SIZE) {
+                    intersectionObserver.observe(card);
+                }
+            });
+
+            // Update loading bar based on initial batch
+            updateLoadingBar(80, `Loading initial thumbnails... (0/${Math.min(BATCH_SIZE, videoFiles.length)})`);
+
+            // Track first batch loading
+            let loadedCount = 0;
+            const firstBatchCards = grid.querySelectorAll('.video-card:not(.loading) .thumbnail');
+            
+            firstBatchCards.forEach(thumbnail => {
                 thumbnail.addEventListener('loadeddata', () => {
                     loadedCount++;
-                    const progress = 60 + (loadedCount / totalVideos) * 40;
-                    updateLoadingBar(progress, `Loading thumbnails... (${loadedCount}/${totalVideos})`);
+                    const progress = 80 + (loadedCount / firstBatchCards.length) * 20;
+                    updateLoadingBar(progress, `Loading initial thumbnails... (${loadedCount}/${firstBatchCards.length})`);
                     
-                    if (loadedCount === totalVideos) {
+                    if (loadedCount === firstBatchCards.length) {
                         setTimeout(() => {
                             updateLoadingBar(100, 'Complete!');
                             setTimeout(hideLoading, 500);
@@ -506,30 +680,27 @@
 
                 thumbnail.addEventListener('error', () => {
                     loadedCount++;
-                    const progress = 60 + (loadedCount / totalVideos) * 40;
-                    updateLoadingBar(progress, `Loading thumbnails... (${loadedCount}/${totalVideos})`);
+                    const progress = 80 + (loadedCount / firstBatchCards.length) * 20;
+                    updateLoadingBar(progress, `Loading initial thumbnails... (${loadedCount}/${firstBatchCards.length})`);
                     
-                    if (loadedCount === totalVideos) {
+                    if (loadedCount === firstBatchCards.length) {
                         setTimeout(() => {
                             updateLoadingBar(100, 'Complete!');
                             setTimeout(hideLoading, 500);
                         }, 300);
                     }
                 });
-
-                const info = document.createElement('div');
-                info.className = 'video-info';
-                info.innerHTML = `
-                    <div class="video-name">${video.name}</div>
-                    <div class="video-size">${video.size}</div>
-                `;
-
-                card.appendChild(thumbnail);
-                card.appendChild(info);
-                grid.appendChild(card);
             });
 
-            // Fallback: if no thumbnails load within 10 seconds, hide loading
+            // Fallback: if no thumbnails in first batch, just hide loading
+            if (firstBatchCards.length === 0) {
+                setTimeout(() => {
+                    updateLoadingBar(100, 'Complete!');
+                    setTimeout(hideLoading, 500);
+                }, 300);
+            }
+
+            // Fallback timeout
             setTimeout(() => {
                 if (document.getElementById('loadingOverlay').classList.contains('active')) {
                     hideLoading();
